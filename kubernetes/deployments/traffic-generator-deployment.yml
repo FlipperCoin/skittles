@@ -1,0 +1,17 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: traffic-generator
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      containers:
+        - name: traffic-generator
+          image: flippercoin/traffic-generator:20190119
+          ports:
+            - containerPort: 30000
+          imagePullPolicy: Never
