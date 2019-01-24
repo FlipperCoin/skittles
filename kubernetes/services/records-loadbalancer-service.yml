@@ -1,12 +1,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: webapi
+  name: records-loadbalancer
 spec:
   selector:
-    app: webapi
+    app: records-loadbalancer
   type: NodePort
   ports:
   - protocol: TCP
-    port: 8080
-    nodePort: 31000
+    port: 30000
+    nodePort: 30000

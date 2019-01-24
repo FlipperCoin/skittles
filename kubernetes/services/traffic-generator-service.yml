@@ -5,8 +5,7 @@ metadata:
 spec:
   selector:
     app: traffic-generator
-  type: NodePort
+  type: ClusterIP
   ports:
   - protocol: TCP
     port: 30000
-    nodePort: 30000

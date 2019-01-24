@@ -1,0 +1,17 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: records-loadbalancer
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: records-loadbalancer
+    spec:
+      containers:
+        - name: crecords-loadbalancer
+          image: flippercoin/records-loadbalancer:20190124
+          ports:
+            - containerPort: 30000
+          imagePullPolicy: Never

@@ -2,6 +2,7 @@ import os
 import threading
 import socket
 import queue
+from time import sleep
 
 import simple_tcp_server
 
@@ -14,6 +15,8 @@ SERVER_MAX_UNAUTHORIZED_CONNECTIONS = "SERVER_MAX_UNAUTHORIZED_CONNECTIONS"
 RECORD_ENCODING = "RECORD_ENCODING"
 SOURCE_HOST = "SOURCE_HOST"
 SOURCE_PORT = "SOURCE_PORT"
+SOURCE_RECONNECT_INTERVAL = "SOURCE_RECONNECT_INTERVAL"
+SOURCE_HOST_MAX_CONNECTION_ATTEMPTS = "SOURCE_HOST_MAX_CONNECTION_ATTEMPTS"
 
 # Defaults
 SERVER_IP_DEFAULT = '0.0.0.0'
@@ -22,6 +25,8 @@ SERVER_MAX_UNAUTHORIZED_CONNECTIONS_DEFAULT = '10'
 RECORD_ENCODING_DEFAULT = 'ascii'
 SOURCE_HOST_DEFAULT = 'traffic-generator'
 SOURCE_PORT_DEFAULT = '30000'
+SOURCE_RECONNECT_INTERVAL_DEFAULT = "1"
+SOURCE_HOST_MAX_CONNECTION_ATTEMPS_DEFAULT = "5"
 
 
 clients = queue.Queue(0) 
@@ -48,7 +53,14 @@ def loadbalancer_worker():
             is_initialized = True
 
         line = lines.get(block=True)
-        client.send(bytes(line, os.getenv(RECORD_ENCODING, RECORD_ENCODING_DEFAULT)))
+        try:
+            client.send(bytes(line, os.getenv(RECORD_ENCODING, RECORD_ENCODING_DEFAULT)))
+        except Exception:
+            print("Trying to send data to a client raised an exception, removing client...")
+            client.shutdown(socket.SHUT_RDWR)
+            client.close()
+            continue
+
         clients.put((client, is_initialized))
 
 def source_worker(source_client, *args, **kwargs):
@@ -60,8 +72,10 @@ def source_worker(source_client, *args, **kwargs):
             # there's probably a bug here if cutting in the middle of a symbol
             recv_data = source_client.recv(4096)
         except ConnectionAbortedError:
-            print("Server diconnected, no reconnect mechanism implemented yet - exiting")
-            exit(1)
+            print("Server diconnected, reconnecting...")
+            connect_to_source()
+            return
+
         corrected_data = leftovers + recv_data
         data_str = str(corrected_data, os.getenv(RECORD_ENCODING, RECORD_ENCODING_DEFAULT))
 
@@ -79,6 +93,27 @@ def source_worker(source_client, *args, **kwargs):
             else:
                 lines.put(record + '\n')
 
+def connect_to_source():
+    host = os.getenv(SOURCE_HOST, SOURCE_HOST_DEFAULT)
+    port = int(os.getenv(SOURCE_PORT, SOURCE_PORT_DEFAULT))
+
+    source_client = socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM)
+
+    attempts_left = int(os.getenv(SOURCE_HOST_MAX_CONNECTION_ATTEMPTS, SOURCE_HOST_MAX_CONNECTION_ATTEMPS_DEFAULT))
+    while attempts_left > 0:
+        try:
+            source_client.connect((host, port))
+        except Exception:
+            print("Failed to connect to source host, trying again...")
+            sleep(int(os.getenv(SOURCE_RECONNECT_INTERVAL, SOURCE_RECONNECT_INTERVAL_DEFAULT)))
+            attempts_left -= 1
+    
+    if attempts_left == 0:
+        print("Max connection attempts to source exceeded, exiting...")
+        exit(1)
+
+    source_thread = threading.Thread(target=source_worker, args=(source_client,))
+    source_thread.start()
 
 def main():
     # Start loadbalancer worker
@@ -93,14 +128,7 @@ def main():
     simple_tcp_server.start_server(ip, port, client_worker, max_unautherized_connections) 
 
     # Connect to source
-    host = os.getenv(SOURCE_HOST, SOURCE_HOST_DEFAULT)
-    port = int(os.getenv(SOURCE_PORT, SOURCE_PORT_DEFAULT))
-
-    source_client = socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM)
-    source_client.connect((host, port))
-
-    source_thread = threading.Thread(target=source_worker, args=(source_client,))
-    source_thread.start()
+    connect_to_source()
 
 if __name__ == "__main__":
     main()
