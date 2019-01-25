@@ -20,13 +20,13 @@ SOURCE_HOST_MAX_CONNECTION_ATTEMPTS = "SOURCE_HOST_MAX_CONNECTION_ATTEMPTS"
 
 # Defaults
 SERVER_IP_DEFAULT = '0.0.0.0'
-SERVER_PORT_DEFAULT = '30000'
+SERVER_PORT_DEFAULT = '32000'
 SERVER_MAX_UNAUTHORIZED_CONNECTIONS_DEFAULT = '10'
 RECORD_ENCODING_DEFAULT = 'ascii'
 SOURCE_HOST_DEFAULT = 'traffic-generator'
 SOURCE_PORT_DEFAULT = '30000'
-SOURCE_RECONNECT_INTERVAL_DEFAULT = "1"
-SOURCE_HOST_MAX_CONNECTION_ATTEMPS_DEFAULT = "5"
+SOURCE_RECONNECT_INTERVAL_DEFAULT = "2"
+SOURCE_HOST_MAX_CONNECTION_ATTEMPS_DEFAULT = "10"
 
 
 clients = queue.Queue(0) 
@@ -57,8 +57,6 @@ def loadbalancer_worker():
             client.send(bytes(line, os.getenv(RECORD_ENCODING, RECORD_ENCODING_DEFAULT)))
         except Exception:
             print("Trying to send data to a client raised an exception, removing client...")
-            client.shutdown(socket.SHUT_RDWR)
-            client.close()
             continue
 
         clients.put((client, is_initialized))
@@ -71,7 +69,7 @@ def source_worker(source_client, *args, **kwargs):
             # if using encodings other than ascii / other 1 byte encodings, 
             # there's probably a bug here if cutting in the middle of a symbol
             recv_data = source_client.recv(4096)
-        except ConnectionAbortedError:
+        except Exception:
             print("Server diconnected, reconnecting...")
             connect_to_source()
             return
@@ -103,8 +101,9 @@ def connect_to_source():
     while attempts_left > 0:
         try:
             source_client.connect((host, port))
-        except Exception:
-            print("Failed to connect to source host, trying again...")
+            break
+        except Exception as e:
+            print("Failed to connect to source host %s:%d, expection : %s" % (host, port, str(e)))
             sleep(int(os.getenv(SOURCE_RECONNECT_INTERVAL, SOURCE_RECONNECT_INTERVAL_DEFAULT)))
             attempts_left -= 1
     

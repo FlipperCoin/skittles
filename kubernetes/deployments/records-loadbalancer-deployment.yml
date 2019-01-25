@@ -10,8 +10,8 @@ spec:
         app: records-loadbalancer
     spec:
       containers:
-        - name: crecords-loadbalancer
+        - name: records-loadbalancer
           image: flippercoin/records-loadbalancer:20190124
           ports:
-            - containerPort: 30000
+            - containerPort: 32000
           imagePullPolicy: Never
