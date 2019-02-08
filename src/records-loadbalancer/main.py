@@ -109,7 +109,7 @@ def connect_to_source():
     
     if attempts_left == 0:
         print("Max connection attempts to source exceeded, exiting...")
-        exit(1)
+        os._exit(1)
 
     source_thread = threading.Thread(target=source_worker, args=(source_client,))
     source_thread.start()
